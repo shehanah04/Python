@@ -325,9 +325,6 @@ class GUI:
 
 
 
-
-
-
     def Alogin(self):
         self.Admin_window = tk.Tk()
         self.Admin_window.title("login")
