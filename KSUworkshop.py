@@ -320,9 +320,8 @@ class GUI:
         cursor.execute("UPDATE Workshop SET membersNum = membersNum + 1 WHERE Number = number")
         conn.commit()
         conn.close()
-
         messagebox.showinfo("Success", "Workshop booked successfully!")
-        self.populate_my_workshops(self.student_id)  # Update the vie
+        self.populate_my_workshops(self.student_id)  # Update the view
 
 
 
