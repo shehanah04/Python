@@ -322,7 +322,7 @@ class GUI:
         conn.close()
 
         messagebox.showinfo("Success", "Workshop booked successfully!")
-        self.populate_my_workshops(self.student_id)  # Update the view
+        self.populate_my_workshops(self.student_id)  # Update the vie
 
 
 
