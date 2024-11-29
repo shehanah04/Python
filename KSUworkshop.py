@@ -34,8 +34,16 @@ conn.execute('''CREATE TABLE IF NOT EXISTS Admin
              (Name TEXT PRIMARY KEY NOT NULL,
              Password TEXT NOT NULL);''')
 
+cursor = conn.cursor()
+cursor.execute('SELECT * FROM Admin WHERE Name = ?', ('Shehanah Alotaibi',))
+if cursor.fetchone() is None:
+    a_password = "123456"
+    hashed_password = hashlib.sha256(a_password.encode()).hexdigest()
+    conn.execute('INSERT INTO Admin (Name, Password) VALUES (?, ?)', ('Shehanah Alotaibi', hashed_password))
+conn.commit()
+#cursor.execute("DROP TABLE IF EXISTS Booking")
 conn.execute('''CREATE TABLE IF NOT EXISTS Booking
-             (studentID INT UNIQUE NOT NULL,
+             (studentID INT NOT NULL,
              workshopID INT UNIQUE NOT NULL,
              FOREIGN KEY(studentID) REFERENCES Student(stuID) ,
              FOREIGN KEY(workshopID) REFERENCES WorkShop(Number) ,
@@ -76,9 +84,10 @@ class GUI:
         self.Fname_entry = tk.Entry(self.frame2)
         self.Lname_entry = tk.Entry(self.frame3)
         self.Id_entry = tk.Entry(self.frame4)
-        self.Password_entry = tk.Entry(self.frame5)
+        self.Password_entry = tk.Entry(self.frame5,show='*')
         self.Email_entry = tk.Entry(self.frame6)
         self.number_entry = tk.Entry(self.frame7)
+
         self.button1 = tk.Button(self.frame8, text="Submit", command=self.saveInfo)
         self.button2 = tk.Button(self.frame8, text="student login", command=self.SLogin)
         self.button3 = tk.Button(self.frame8, text="Admin login", command=self.Alogin)
@@ -91,6 +100,7 @@ class GUI:
         self.frame6.pack()
         self.frame7.pack()
         self.frame8.pack()
+
         self.label1.pack()
         self.label2.pack(side=tk.LEFT)
         self.Fname_entry.pack(side=tk.RIGHT)
@@ -158,7 +168,7 @@ class GUI:
                 return
 
             # insert and check if id exists
-            id = cursor2.execute(f"SELECT stuID FROM Student WHERE stuID = {stuID}")
+            stuID = cursor2.execute(f"SELECT stuID FROM Student WHERE stuID = {stuID}")
             if len(id.fetchall()) == 0:
                 sql = """INSERT INTO Student VALUES('{}','{}','{}','{}','{}','{}')""".format(stuID, firstname, lastname, hashedpass ,email, mobile)
                 cursor2.execute(sql)
@@ -168,10 +178,10 @@ class GUI:
             else:
                 messagebox.showinfo("Error", "ID already exist")
             conn.close()
-        except sqlite3.Error:
+        except sqlite3.Error as e:
             messagebox.showinfo("database error", "DataBase ERROR")
 
-        except:
+        except Exception as e:
             messagebox.showinfo("error", "something wrong happened and record not saved")
 
 
@@ -188,7 +198,7 @@ class GUI:
         self.label2 = tk.Label(self.frame2, text="ID")
         self.label3 = tk.Label(self.frame3, text="Password")
         self.Id_entry = tk.Entry(self.frame2)
-        self.Password_entry = tk.Entry(self.frame3)
+        self.Password_entry = tk.Entry(self.frame3, show = '*')
         self.button1 = tk.Button(self.frame4, text="Log in", command=self.ScheckLogIn)
 
         self.frame1.pack()
@@ -207,17 +217,17 @@ class GUI:
     def ScheckLogIn(self):
         conn = sqlite3.connect('KSUWorkShop.db')
         cursor3 = conn.cursor()
-        id=str(self.Id_entry.get())
+        sID=str(self.Id_entry.get())
         reg = "^[0-9]{9}$"
-        x = re.search(re.compile(reg), id)
+        x = re.search(re.compile(reg), sID)
         if not x:
             messagebox.showinfo("Invalid student ID", "Student ID must be 9 digits")
             return
         password = str(self.Password_entry.get())
         hashedpass = hashlib.sha256(password.encode()).hexdigest()
-        check = cursor3.execute("SELECT stuID FROM Student WHERE stuID = ? AND Password = ?", (id,hashedpass))
+        check = cursor3.execute("SELECT stuID FROM Student WHERE stuID = ? AND Password = ?", (sID,hashedpass))
         if len(check.fetchall()) != 0:
-            student_id = id
+            student_id = sID
             # Create and show the student window
             self.stuWindow(student_id)
             self.Student_window.destroy()  # Close the login window
@@ -247,7 +257,7 @@ class GUI:
         self.workshop_tree.pack(fill="both", expand=True)
 
         # Button to book a workshop
-        self.book_button = tk.Button(self.book_tab, text="Book Workshop", command=self.book_workshop)
+        self.book_button = tk.Button(self.book_tab, text="Book Workshop", command=lambda: self.book_workshop(self.student_id))
         self.book_button.pack()
 
         # Tab 2: View My Workshops
@@ -277,7 +287,7 @@ class GUI:
         cursor = conn.cursor()
 
         # Modify query to match your table structure
-        cursor.execute("SELECT Number, Name, Location, date, time FROM Workshops WHERE Capacity > (SELECT COUNT(*) FROM Bookings WHERE Bookings.workshopID = Workshops.Number)")
+        cursor.execute("SELECT Number, Name, Location, date, time FROM Workshop WHERE Capacity > (SELECT COUNT(*) FROM Booking WHERE Booking.workshopID = Workshop.Number)")
         workshops = cursor.fetchall()
 
         for workshop in workshops:
@@ -290,7 +300,7 @@ class GUI:
         cursor = conn.cursor()
 
         # Modify query to match your table structure
-        cursor.execute("SELECT Workshops.Number, Name, Location, date, time FROM Bookings INNER JOIN Workshops ON Bookings.workshopID = Workshops.Number WHERE Bookings.studentID = ?", (student_id))
+        cursor.execute("SELECT Workshop.Number, Name, Location, date, time FROM Booking INNER JOIN Workshop ON Booking.workshopID = Workshop.Number WHERE Booking.studentID = ?",(student_id,))
         bookings = cursor.fetchall()
 
         for booking in bookings:
@@ -298,36 +308,59 @@ class GUI:
 
         conn.close()
 
-    def book_workshop(self):
-        #selected_item = self.workshop_tree.selection()[0]
-        #workshop_id = self.workshop_tree.item(selected_item)['values'][0]
+    def book_workshop(self,student_ID):
+        try:
+            selected_item = self.workshop_tree.selection()[0]
+            workshop_id = self.workshop_tree.item(selected_item)['values'][0]
+            conn = sqlite3.connect('KSUWorkShop.db')
+            cursor = conn.cursor()
 
-        conn = sqlite3.connect('KSUWorkShop.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Workshop WHERE Number = workshopID AND Capacity > membersNum")
-        workshop_info = cursor.fetchone()
-        if not workshop_info:
-            messagebox.showerror("Error", "Workshop is full or already booked")
-            return
+            cursor.execute(f"SELECT Name, Location FROM WorkShop WHERE Number={workshop_id}")
+            workshop_data = cursor.fetchone()
+            if workshop_data:
+                workshop_name = workshop_data[0]
+                location = workshop_data[1]
+            else:
+                workshop_name = "N/A"
+                location = "N/A"
 
-        cursor.execute("SELECT * FROM Booking WHERE studentID = stuID AND workshopID = number")
-        if cursor.fetchone():
-            messagebox.showerror("Error", "You have already booked this workshop")
-            return
+            cursor.execute("SELECT * FROM Workshop WHERE Number = ? AND Capacity > membersNum", (workshop_id,))
+            workshop_info = cursor.fetchone()
+            if not workshop_info:
+                messagebox.showerror("Error", "Workshop is full or already booked")
+                self.log_transaction("FAILED: Capacity is full", student_ID, workshop_name, location)
+                return
 
-            # Book the workshop
-        cursor.execute("INSERT INTO Booking (studentID, workshopID) VALUES (stuID, number)")
-        cursor.execute("UPDATE Workshop SET membersNum = membersNum + 1 WHERE Number = number")
-        conn.commit()
-        conn.close()
-        messagebox.showinfo("Success", "Workshop booked successfully!")
-        self.populate_my_workshops(self.student_id)  # Update the view
+            cursor.execute("SELECT * FROM Booking WHERE studentID = ? AND workshopID = ?", (student_ID, workshop_id))
+            if cursor.fetchone():
+                messagebox.showerror("Error", "You have already booked this workshop")
+                self.log_transaction("FAILED: Workshop already booked", student_ID, workshop_name, location)
+                return
 
+                # Book the workshop
+            cursor.execute("INSERT INTO Booking (studentID, workshopID) VALUES (?, ?)", (student_ID, workshop_id))
+            cursor.execute("UPDATE Workshop SET membersNum = membersNum + 1 WHERE Number = ?", (workshop_id,))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Success", "Workshop booked successfully!")
+            self.log_transaction("SUCCESS", student_ID, workshop_name, location)
+            self.populate_my_workshops_tree(student_ID)  # Update the view
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+            self.log_transaction("FAILED: Database error",student_ID, workshop_name, location)
 
+    def log_transaction(self, status, user_id, workshop_name, location):
+        log_file = open("transactions.txt", "a")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = (f"{timestamp} - Status: {status} - "
+                     f"UserID: {user_id} - Workshop: {workshop_name} - "
+                     f"Location: {location}\n")
+        log_file.write(log_entry)
+        log_file.close()
 
     def Alogin(self):
         self.Admin_window = tk.Tk()
-        self.Admin_window.title("login")
+        self.Admin_window.title("Admin login")
         self.Admin_window.geometry("400x300")
         self.Admin_window.configure(background="white")
         self.frame1 = tk.Frame(self.Admin_window)
@@ -335,11 +368,11 @@ class GUI:
         self.frame3 = tk.Frame(self.Admin_window)
         self.frame4 = tk.Frame(self.Admin_window)
         self.label1 = tk.Label(self.frame1, text="Admin Login")
-        self.label2 = tk.Label(self.frame2, text="ID")
+        self.label2 = tk.Label(self.frame2, text="Name")
         self.label3 = tk.Label(self.frame3, text="Password")
-        self.Id_entry = tk.Entry(self.frame2)
-        self.Password_entry = tk.Entry(self.frame3)
-        self.button1 = tk.Button(self.frame4, text="Log in", command=self.AcheckLogIn)
+        name_entry = tk.Entry(self.frame2)
+        aPassword_entry = tk.Entry(self.frame3,show='*')
+        self.button1 = tk.Button(self.frame4, text="Log in", command=lambda: self.AcheckLogIn(name_entry.get(),aPassword_entry.get()))
 
         self.frame1.pack()
         self.frame2.pack()
@@ -347,33 +380,25 @@ class GUI:
         self.frame4.pack()
         self.label1.pack()
         self.label2.pack(side=tk.LEFT)
+        name_entry.pack(side=tk.RIGHT)
         self.label3.pack(side=tk.LEFT)
-        self.Id_entry.pack(side=tk.RIGHT)
-        self.Password_entry.pack(side=tk.RIGHT)
+        aPassword_entry.pack(side=tk.RIGHT)
+
         self.button1.pack()
         self.Admin_window.mainloop()
-        self.Admin_window.destroy()
 
-    def AcheckLogIn(self):
+    def AcheckLogIn(self,name,password):
         conn = sqlite3.connect('KSUWorkShop.db')
-        cursor4 = conn.cursor()
-        ID = str(self.Id_entry.get())
-        reg = "^[0-9]{9}$"
-        x = re.search(re.compile(reg), ID)
-        if not x:
-            messagebox.showinfo("Invalid ID", "ID must be 9 digits")
+        hashed_pass = hashlib.sha256(password.encode()).hexdigest()
+        cursor = conn.execute('SELECT * FROM Admin WHERE Name = ? AND Password = ?', (name, hashed_pass))
+        result = cursor.fetchone()
+        conn.close()
+        if not result:
+            messagebox.showinfo("Invalid login", "Please try again")
             return
-        password = str(self.Password_entry.get())
-        hashedpass = hashlib.sha256(password.encode()).hexdigest()
-        check = cursor4.execute(f"SELECT Password FROM Admin WHERE Password = {hashedpass}")
-        if len(check.fetchall()) != 0:
-            self.AdminWindow()
         else:
-            messagebox.showinfo("Error", "password is incorrect")
-
-
-
-
+            self.Admin_window.destroy()  # Close the login window
+            self.AdminWindow()
 
     def AdminWindow(self):
         self.Admin_window2 = tk.Tk()
@@ -388,12 +413,12 @@ class GUI:
         self.frame6 = tk.Frame(self.Admin_window2)
         self.frame7 = tk.Frame(self.Admin_window2)
         self.frame8 = tk.Frame(self.Admin_window2)
-        self.label1 = tk.Label(self.frame1, text="Rigster New workshop")
-        self.label2 = tk.Label(self.frame2, text="workshop Name")
+        self.label1 = tk.Label(self.frame1, text="Register New workshop")
+        self.label2 = tk.Label(self.frame2, text="Workshop Name")
         self.label3 = tk.Label(self.frame3, text="Workshop location")
-        self.label4 = tk.Label(self.frame3, text="Workshop capacity")
-        self.label5 = tk.Label(self.frame4, text="Date")
-        self.label6 = tk.Label(self.frame5, text="Time")
+        self.label4 = tk.Label(self.frame4, text="Workshop capacity")
+        self.label5 = tk.Label(self.frame5, text="Date")
+        self.label6 = tk.Label(self.frame6, text="Time")
         self.name_entry = tk.Entry(self.frame2)
         self.location_entry = tk.Entry(self.frame3)
         self.capacity_entry = tk.Entry(self.frame4)
@@ -401,7 +426,7 @@ class GUI:
         self.time_entry = tk.Entry(self.frame6)
         self.button1 = tk.Button(self.frame7, text="create", command=self.createWorkshop)
         self.button2 = tk.Button(self.frame7, text="BackUp", command=self.BackUp)
-        self.button3 = tk.Button(self.frame8, text="Log out", command=self.Logout)
+        self.button3 = tk.Button(self.frame8, text="Log out", command=self.logout)
 
         self.frame1.pack()
         self.frame2.pack()
@@ -443,35 +468,34 @@ class GUI:
                 messagebox.showinfo("missing input", "workshop location should not be empty")
                 return
 
-            capacity = str(self.Capacity_entry.get())
-            if isdigit(capacity):
+            capacity = str(self.capacity_entry.get())
+            if capacity.isdigit():
                 capacity = int(capacity)
             else:
                 messagebox.showinfo("invalid input", "workshop capacity should be integer")
-            # validate date
-            date = str(self.date_entry.get())
-            reg = "^(3[01]|[12][0-9]|0[1-9])/(1[0-2]|0[1-9])/[0-9]{4}$"
-            x = re.search(re.compile(reg), date)
-            if not x:
-                messagebox.showinfo("invalid Date format","date format must be dd/mm/yyyy")
                 return
-            time = str(self.time_entry.get())
+            # validate date
+            w_date = str(self.date_entry.get())
+            reg = "^(3[01]|[12][0-9]|0[1-9])/(1[0-2]|0[1-9])/([0-9]{4})$"
+            if not re.match(reg, w_date):
+                messagebox.showinfo("invalid date format","date format must be dd/mm/yyyy")
+                return
+            w_time = str(self.time_entry.get())
             # validate time
             reg = "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$"
-            x = re.search(re.compile(reg), time)
-            if not x:
-                messagebox.showinfo("invalid Time format", "Time format must be in form of hh:MM")
+            if not re.match(reg, w_time):
+                messagebox.showinfo("invalid time format", "Time format must be in form of hh:mm")
                 return
-            number=str(randint(10000, 99999))
-            sql = """INSERT INTO WorkShop VALUES('{}','{}','{}','{}','{}','{}',{})""".format(number,name, location, capacity, date, time,0)
-            cursor5.execute(sql)
+            rand_number=randint(10000, 99999)
+            sql = """INSERT INTO WorkShop (Number, Name, Location, Capacity, date, time, membersNum) VALUES (?, ?, ?, ?, ?, ?, ?)"""
+            cursor5.execute(sql, (rand_number, name, location, capacity, w_date, w_time, 0))
             conn.commit()
+            conn.close()
             messagebox.showinfo("Done", "workshop information has been saved")
-        except sqlite3:
+        except sqlite3.Error as e:
             messagebox.showinfo("Error","something wrong in database")
-        except:
+        except Exception as e:
             messagebox.showinfo("Error","something wrong")
-
 
     def BackUp(self):
         file=open("workshop.CSV","a",newline='')
